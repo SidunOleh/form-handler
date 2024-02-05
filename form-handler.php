@@ -6,98 +6,97 @@ Description: Сlass for handling forms
 Author: Sidun Oleh 
 */
 
-defined( 'ABSPATH' ) or die;
-
 class SOVA_WP_Form
 {
-    public const NONCE = 'jfskalfajf4$%$^&kdsj23928ja';
-
     public const EMAIL_REGEX = '^\\S+@\\S+\\.\\S+';
 
-    public const TEXT_REGEX = '[a-zA-Zа-яёА-ЯЁ \n]{3,}';
-
-    public const PHONE_REGEX = '[0-9\(\)\-\+]{5,}';
+    public const PHONE_REGEX = '^\(\d{3}\) \d{3}\-\d{4}$';
 
     private $action;
 
-    private $fields;
+    private $rules;
 
     private $to;
 
     private $subject;
 
-    public function __construct( string $action, array $fields, string $to = null )
-    {
+    private $headers;
+
+    public function __construct( 
+        string $action, 
+        array $rules, 
+        string $to = '', 
+        string $subject = '',
+        array $headers = []
+    ) {
         $this->action = $action;
-        $this->fields = $fields;
+        $this->rules = $rules;
         $this->to = $to ?: get_option( 'admin_email' );
-        $this->subject = get_bloginfo( 'name' ) . ' | ' . __( 'Callback form' );
-
-        $this->hooks_init();
-    }
-
-    private function hooks_init()
-    {
-        add_action( "wp_ajax_{$this->action}",  [ $this, 'handle' ] );
-        add_action( "wp_ajax_nopriv_{$this->action}", [ $this, 'handle' ] );
-
-        add_filter( 'wp_mail_content_type', [ $this, 'mail_content_type' ] );
+        $this->subject = $subject ?: get_bloginfo( 'name' );
+        $this->headers = $headers;
     }
 
     public function handle()
     {
-        $this->verify_nonce();
+        add_action( "wp_ajax_{$this->action}",  [ $this, 'handler' ] );
+        add_action( "wp_ajax_nopriv_{$this->action}", [ $this, 'handler' ] );
+    }
 
-        $error = false;
-        $data = [];
-        foreach ( $this->fields as $name => $regex ) {
-            if ( ! preg_match( "/$regex/u", ( $_POST[ $name ] ?? '' ) ) ) {
-                $error = true;
-                break;
+    public function handler()
+    {
+        $validated = [];
+        $errors = [];
+        foreach ( $this->rules as $field => $rule ) {
+            $fieldVal = $_POST[ $field ] ?? '';
+
+            if ( ! preg_match( "/{$rule[ 'regex' ]}/u", $fieldVal ) ) {
+                $errors[ $field ] = $rule[ 'msg' ];
+            } else {
+                $validated[ $field ] = $_POST[ $field ];
             }
-
-            $data[ $name ] = $_POST[ $name ];
         }
 
-        if ( $error ) {
-            $this->fault();
+        if ( isset( $validated[ 'email' ] ) ) {
+            $this->headers[] = "Reply-To: {$validated[ 'email' ]} <{$validated[ 'email' ]}>";
         }
 
-        wp_mail( $this->to, $this->subject, $this->message( $data ) );
-
-        $this->success();
+        if ( ! empty( $errors ) ) {
+            $this->fault( $errors );
+        } else {
+            $this->send( $validated );
+        }
     }
 
-    private function verify_nonce()
+    private function send( array $data )
     {
-        wp_verify_nonce( $_POST[ '_wpnonce' ] ?? '', self::NONCE ) ?: wp_die( wp_send_json( [ 'status' => false, ] ) );
+        $msg = $this->msg( $data );
+        wp_mail( $this->to, $this->subject, $msg, $this->headers );
+
+        wp_send_json( [ 'status' => true, ] );
+        wp_die();
     }
 
-    private function success()
+    private function fault( array $errors )
     {
-        wp_die( wp_send_json( [ 'status' => true, ] ) );
+        wp_send_json( [ 'status' => false, 'errors' => $errors ] );
+        wp_die();
     }
 
-    private function fault()
+    private function msg( array $data )
     {
-        wp_die( wp_send_json( [ 'status' => false, ] ) );
-    }
-
-    private function message( array $fields )
-    {
-        $message = '';
-        foreach ( $fields as $name => $value ) {
-            if ( empty( $value ) ) {
+        $msg = '';
+        foreach ( $data as $name => $value ) {
+            if ( empty( $name ) or empty( $value ) ) {
                 continue;
             }
-            $message .= ucfirst( $name ) . ": {$value}<hr>";
+
+            $name = explode( '_', $name );
+            $name[0] = ucfirst( $name[0] );
+            $name = implode( ' ', $name );
+
+            $msg .= "{$name}: {$value}<hr>";
         }
 
-        return $message;
-    }
-
-    public function mail_content_type()
-    {
-        return 'text/html';
+        return $msg;
     }
 }
