@@ -1,11 +1,5 @@
 <?php
 
-/*
-Plugin Name: Form handler
-Description: Сlass for handling forms
-Author: Sidun Oleh 
-*/
-
 class SOVA_WP_Form
 {
     public const EMAIL_REGEX = '^\\S+@\\S+\\.\\S+';
@@ -50,7 +44,7 @@ class SOVA_WP_Form
             $fieldVal = $_POST[ $field ] ?? '';
 
             if ( ! preg_match( "/{$rule[ 'regex' ]}/u", $fieldVal ) ) {
-                $errors[ $field ] = $rule[ 'msg' ];
+                $errors[ $field ] = $rule[ 'msg' ] ?? "$field " . __( 'is invalid' );
             } else {
                 $validated[ $field ] = $_POST[ $field ];
             }
