@@ -44,7 +44,7 @@ class SOVA_WP_Form
             $fieldVal = $_POST[ $field ] ?? '';
 
             if ( ! preg_match( "/{$rule[ 'regex' ]}/u", $fieldVal ) ) {
-                $errors[ $field ] = $rule[ 'msg' ] ?? "$field " . __( 'is invalid' );
+                $errors[ $field ] = $rule[ 'msg' ];
             } else {
                 $validated[ $field ] = $_POST[ $field ];
             }
